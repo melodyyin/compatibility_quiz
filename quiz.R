@@ -138,4 +138,47 @@ get_matrix = function(my_question, my_raw = raw2) {
   return(dist_matrix) 
 }
 
-Reduce('+', lapply(unique(raw2$question), function(x) get_matrix(x)))
+# results 
+final_matrix = Reduce('+', lapply(unique(raw2$question), function(x) get_matrix(x))) # this function = amazin
+
+final_matrix[ final_matrix == 0 ] = 100
+
+final_results = data.frame(user_id = 1:nrow(final_matrix), 
+                           match = apply(final_matrix, 2, which.min)) 
+
+rows_user_id = data.frame(user_name = unique(raw2$user_id), 
+                          row_number = 1:length(unique(raw2$user_id)))
+
+final_results %>% 
+  left_join(rows_user_id, by=c("match" = "row_number")) %>% 
+  rename(match_name = user_name) %>% 
+  left_join(rows_user_id, by=c("user_id" = "row_number")) %>% 
+  dplyr::select(user_id, user_name, match, match_name) 
+
+# visualization
+# divide the questions into 2 sets and average the distance scores 
+# the match distance plots will be from the perspective of the user 
+# since distances are relative 
+half_q = length(unique(raw2$question))/2 - 1 # 1:this
+half_q2 = length(unique(raw2$question)) # prev+1:this 
+
+final_matrix_1 = Reduce('+', lapply(unique(raw2$question)[1:half_q], 
+                                    function(x) get_matrix(x)))
+final_matrix_2 = Reduce('+', lapply(unique(raw2$question)[(half_q+1):half_q2], 
+                                    function(x) get_matrix(x)))
+
+get_match_vis = function(my_user_name, rui = rows_user_id, fm1=final_matrix_1, fm2=final_matrix_2) {
+  library(ggplot2)
+  library(ggrepel) 
+  library()
+  
+  col = rui[rui$user_name == my_user_name,]$row_number %>% return()
+  
+  vis_df = data.frame(dimension_1 = fm1[,col],
+                      dimension_2 = fm2[,col],
+                      match_name = rui$user_name) 
+  
+  ggplot(vis_df, 
+         aes(x=dimension_1, y=dimension_2, label=match_name)) + 
+    geom_point() + geom_label_repel() + theme_light()
+}
