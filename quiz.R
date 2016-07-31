@@ -1,9 +1,11 @@
 library(dplyr)
 library(tidyr)
 
+library(testthat)
+
 # PREPROCESSING 
 # read in quiz results, convert columns to q# 
-raw = read.csv("~/Documents/github/compatibility_quiz/quiz.csv", 
+raw = read.csv("~/Documents/github/compatibility_quiz/quiz_full.csv", 
                stringsAsFactors = FALSE, header=TRUE, na.strings = c(""))
 raw = dplyr::select(raw, -Timestamp)
 new_cols = paste0("q", seq(1:(ncol(raw)-1)))
@@ -139,27 +141,49 @@ get_matrix = function(my_question, my_raw = raw2) {
 }
 
 # results 
-final_matrix = Reduce('+', lapply(unique(raw2$question), function(x) get_matrix(x))) # this function = amazin
+final_matrix = Reduce('+', lapply(unique(raw2$question), 
+                                  function(x) get_matrix(x))) # this function = amazin
 
-final_matrix[ final_matrix == 0 ] = 100
+final_matrix[ final_matrix == 0 ] = NA # this won't work for final_results_max
 
 final_results = data.frame(user_id = 1:nrow(final_matrix), 
-                           match = apply(final_matrix, 2, which.min)) 
+                           match = apply(final_matrix, 2, which.min), # index of min 
+                           match2 = apply(final_matrix, 2, function(x) order(x)[2]), 
+                           match3 = apply(final_matrix, 2, function(x) order(x)[3])) 
+
+final_results_max = data.frame(user_id = 1:nrow(final_matrix), 
+                               worst_match = apply(final_matrix, 2, which.max),
+                               second_worst_match = apply(final_matrix, 2, function(x) order(x, decreasing = TRUE)[2]))  
 
 rows_user_id = data.frame(user_name = unique(raw2$user_id), 
                           row_number = 1:length(unique(raw2$user_id)))
 
 final_results %>% 
   left_join(rows_user_id, by=c("match" = "row_number")) %>% 
-  rename(match_name = user_name) %>% 
+  rename(match1 = match,
+         match_name = user_name) %>% 
+  left_join(rows_user_id, by=c("match2" = "row_number")) %>%
+  rename(match2_name = user_name) %>%
+  left_join(rows_user_id, by=c("match3" = "row_number")) %>%
+  rename(match3_name = user_name) %>%
   left_join(rows_user_id, by=c("user_id" = "row_number")) %>% 
-  dplyr::select(user_id, user_name, match, match_name) 
+  left_join(final_results_max, by="user_id") %>% 
+  left_join(rows_user_id, by=c("worst_match" = "row_number")) %>% 
+  rename(worst_match_name = user_name.y,
+         user_name = user_name.x) %>%
+  left_join(rows_user_id, by=c("second_worst_match" = "row_number")) %>%
+  rename(second_worst_match_name = user_name.y,
+         user_name = user_name.x) %>% 
+  dplyr::select(user_name, match_name, match2_name, match3_name, worst_match_name, second_worst_match_name) -> results_df
+  
+options(max.print=9999)
+results_df
 
 # visualization
 # divide the questions into 2 sets and average the distance scores 
 # the match distance plots will be from the perspective of the user 
 # since distances are relative 
-half_q = length(unique(raw2$question))/2 - 1 # 1:this
+half_q = round(length(unique(raw2$question))/2) - 1 # 1:this
 half_q2 = length(unique(raw2$question)) # prev+1:this 
 
 final_matrix_1 = Reduce('+', lapply(unique(raw2$question)[1:half_q], 
@@ -170,7 +194,6 @@ final_matrix_2 = Reduce('+', lapply(unique(raw2$question)[(half_q+1):half_q2],
 get_match_vis = function(my_user_name, rui = rows_user_id, fm1=final_matrix_1, fm2=final_matrix_2) {
   library(ggplot2)
   library(ggrepel) 
-  library()
   
   col = rui[rui$user_name == my_user_name,]$row_number %>% return()
   
@@ -180,5 +203,10 @@ get_match_vis = function(my_user_name, rui = rows_user_id, fm1=final_matrix_1, f
   
   ggplot(vis_df, 
          aes(x=dimension_1, y=dimension_2, label=match_name)) + 
-    geom_point() + geom_label_repel() + theme_light()
+    geom_point() + geom_label_repel() +
+    ggtitle(paste("compatibility plot for", my_user_name)) + theme_light() #+
+    #xlim(c(0,3.5)) + ylim(c(0,3.5)) # this prob needs to be adjusted 
 }
+
+# run tests
+test_dir("tests/")
